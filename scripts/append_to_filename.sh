@@ -18,6 +18,21 @@ Options:
 Notes:
 - Appends before the last dot in the filename; if no dot, appends to the end.
 - Safely handles spaces and unusual characters.
+
+### Examples
+
+* From a list file:
+./append_to_filename.sh "_v2" -f files.txt
+
+* From stdin:
+find . -type f -name "*.jpg" | ./append_to_filename.sh "_edited"
+
+* NUL-safe (handles filenames with newlines):
+find . -type f -print0 | ./append_to_filename.sh "_bak" -0
+
+* Passing files directly + dry run:
+./append_to_filename.sh "_final" a.pdf "weird name.txt" -n
+
 EOF
 }
 
