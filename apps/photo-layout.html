@@ -501,7 +501,7 @@ function getCanvasSize() {
   }
 }
 
-function computeCells(count, canvasW, canvasH, pad, gap) {
+function computeCells(count, canvasW, canvasH, pad, gap, photos) {
   const layout = state.layout;
   const innerW = canvasW - pad * 2;
   const innerH = canvasH - pad * 2;
@@ -512,9 +512,18 @@ function computeCells(count, canvasW, canvasH, pad, gap) {
   const cells = [];
 
   if (layout === 'v-stack') {
-    const cellH = (innerH - gap * (count - 1)) / count;
+    // Compute each image's natural height at full inner width
+    const naturalHeights = photos.map(p => innerW / (p.img.naturalWidth / p.img.naturalHeight));
+    let totalH = naturalHeights.reduce((a, b) => a + b, 0) + gap * (count - 1);
+    // Scale proportionally if total exceeds available height
+    const scale = totalH > innerH ? innerH / totalH : 1;
+    const scaledHeights = naturalHeights.map(h => h * scale);
+    const finalTotalH = scaledHeights.reduce((a, b) => a + b, 0) + gap * (count - 1);
+    // Center vertically
+    let y = pad + (innerH - finalTotalH) / 2;
     for (let i = 0; i < count; i++) {
-      cells.push({ x: pad, y: pad + i * (cellH + gap), w: innerW, h: cellH });
+      cells.push({ x: pad, y, w: innerW, h: scaledHeights[i], contain: true });
+      y += scaledHeights[i] + gap;
     }
   } else if (layout === 'h-stack') {
     const cellW = (innerW - gap * (count - 1)) / count;
@@ -614,6 +623,31 @@ function computeCells(count, canvasW, canvasH, pad, gap) {
   return cells;
 }
 
+function drawImageContain(ctx, img, x, y, w, h, radius) {
+  const imgAspect = img.naturalWidth / img.naturalHeight;
+  const cellAspect = w / h;
+  let dw, dh, dx, dy;
+  if (imgAspect > cellAspect) {
+    dw = w;
+    dh = w / imgAspect;
+    dx = x;
+    dy = y + (h - dh) / 2;
+  } else {
+    dh = h;
+    dw = h * imgAspect;
+    dx = x + (w - dw) / 2;
+    dy = y;
+  }
+
+  ctx.save();
+  if (radius > 0) {
+    roundRect(ctx, x, y, w, h, radius);
+    ctx.clip();
+  }
+  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh);
+  ctx.restore();
+}
+
 function drawImageCover(ctx, img, x, y, w, h, radius) {
   const imgAspect = img.naturalWidth / img.naturalHeight;
   const cellAspect = w / h;
@@ -670,11 +704,15 @@ function renderCanvas() {
   ctx.fillStyle = state.bgColor;
   ctx.fillRect(0, 0, w, h);
 
-  const cells = computeCells(count, w, h, state.padding, state.gap);
+  const cells = computeCells(count, w, h, state.padding, state.gap, state.photos);
   for (let i = 0; i < count; i++) {
     const cell = cells[i];
     if (!cell) break;
-    drawImageCover(ctx, state.photos[i].img, cell.x, cell.y, cell.w, cell.h, state.radius);
+    if (cell.contain) {
+      drawImageContain(ctx, state.photos[i].img, cell.x, cell.y, cell.w, cell.h, state.radius);
+    } else {
+      drawImageCover(ctx, state.photos[i].img, cell.x, cell.y, cell.w, cell.h, state.radius);
+    }
   }
 }
 
