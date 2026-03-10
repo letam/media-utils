@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Layout</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #222;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 280px;
+    border-right: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  .sidebar section {
+    padding: 16px;
+    border-bottom: 1px solid #1a1a1a;
+  }
+
+  .sidebar h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #888;
+    margin-bottom: 12px;
+  }
+
+  /* Upload area */
+  .upload-zone {
+    border: 2px dashed #333;
+    border-radius: 10px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: #666;
+    background: #151515;
+  }
+
+  .upload-zone p {
+    font-size: 13px;
+    color: #888;
+    margin-top: 8px;
+  }
+
+  .upload-zone .icon {
+    font-size: 28px;
+    color: #555;
+  }
+
+  #file-input { display: none; }
+
+  /* Photo thumbnails */
+  .thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+  }
+
+  .thumb:active { cursor: grabbing; }
+  .thumb.dragging { opacity: 0.4; }
+  .thumb.dragover-thumb { border-color: #fff; }
+
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .thumb .remove-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    border: none;
+    font-size: 11px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .thumb:hover .remove-btn { display: flex; }
+
+  /* Aspect ratio buttons */
+  .ratio-options {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .ratio-btn {
+    background: #181818;
+    border: 1.5px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 10px 8px;
+    color: #ccc;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-size: 12px;
+  }
+
+  .ratio-btn:hover { border-color: #444; background: #1e1e1e; }
+  .ratio-btn.active { border-color: #fff; color: #fff; background: #1a1a1a; }
+
+  .ratio-btn .label { font-weight: 600; display: block; }
+  .ratio-btn .sub { font-size: 10px; color: #666; margin-top: 2px; display: block; }
+
+  /* Layout buttons */
+  .layout-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .layout-btn {
+    background: #181818;
+    border: 1.5px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 10px 6px;
+    color: #ccc;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .layout-btn:hover { border-color: #444; }
+  .layout-btn.active { border-color: #fff; color: #fff; }
+  .layout-btn .lbl { font-size: 9px; display: block; margin-top: 4px; color: #888; }
+  .layout-btn.active .lbl { color: #ccc; }
+
+  /* Options */
+  .option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .option-row label {
+    font-size: 13px;
+    color: #aaa;
+  }
+
+  .option-row input[type="range"] {
+    width: 120px;
+    accent-color: #fff;
+  }
+
+  .option-row input[type="color"] {
+    width: 32px;
+    height: 28px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+
+  /* Canvas area */
+  .canvas-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    overflow: auto;
+    background: #0e0e0e;
+  }
+
+  .canvas-wrapper {
+    position: relative;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  #preview-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100vh - 120px);
+    object-fit: contain;
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    color: #444;
+    font-size: 14px;
+  }
+
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* Export button */
+  .export-btn {
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .export-btn:hover { opacity: 0.85; }
+  .export-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* Scrollbar */
+  .sidebar::-webkit-scrollbar { width: 6px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Photo Layout</h1>
+  <button class="export-btn" id="export-btn" disabled>Export PNG</button>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <section>
+      <h3>Photos</h3>
+      <div class="upload-zone" id="upload-zone">
+        <div class="icon">+</div>
+        <p>Drop photos or click to upload</p>
+      </div>
+      <input type="file" id="file-input" accept="image/*" multiple>
+      <div class="thumbs" id="thumbs"></div>
+    </section>
+
+    <section>
+      <h3>Format</h3>
+      <div class="ratio-options" id="ratio-options">
+        <button class="ratio-btn active" data-ratio="9:16">
+          <span class="label">9:16</span><span class="sub">Story</span>
+        </button>
+        <button class="ratio-btn" data-ratio="1:1">
+          <span class="label">1:1</span><span class="sub">Square</span>
+        </button>
+        <button class="ratio-btn" data-ratio="4:5">
+          <span class="label">4:5</span><span class="sub">Portrait</span>
+        </button>
+        <button class="ratio-btn" data-ratio="16:9">
+          <span class="label">16:9</span><span class="sub">Landscape</span>
+        </button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Layout</h3>
+      <div class="layout-options" id="layout-options">
+        <button class="layout-btn active" data-layout="v-stack" title="Vertical stack">
+          <svg width="20" height="20" viewBox="0 0 20 20"><rect x="2" y="1" width="16" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="11" width="16" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="lbl">Stack</span>
+        </button>
+        <button class="layout-btn" data-layout="h-stack" title="Horizontal">
+          <svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="2" width="8" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11" y="2" width="8" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="lbl">Side</span>
+        </button>
+        <button class="layout-btn" data-layout="grid" title="Grid">
+          <svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="11" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11" y="11" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="lbl">Grid</span>
+        </button>
+        <button class="layout-btn" data-layout="feature" title="Feature + side">
+          <svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="11" height="18" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="14" y="1" width="5" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="14" y="11" width="5" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="lbl">Feature</span>
+        </button>
+        <button class="layout-btn" data-layout="top-heavy" title="Top heavy">
+          <svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="14" width="8" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11" y="14" width="8" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="lbl">Hero</span>
+        </button>
+        <button class="layout-btn" data-layout="mosaic" title="Mosaic">
+          <svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="8" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11" y="1" width="8" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11" y="8" width="8" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="14" width="8" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="lbl">Mosaic</span>
+        </button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Style</h3>
+      <div class="option-row">
+        <label>Gap</label>
+        <input type="range" id="gap-slider" min="0" max="40" value="8">
+      </div>
+      <div class="option-row">
+        <label>Padding</label>
+        <input type="range" id="padding-slider" min="0" max="60" value="0">
+      </div>
+      <div class="option-row">
+        <label>Radius</label>
+        <input type="range" id="radius-slider" min="0" max="40" value="0">
+      </div>
+      <div class="option-row">
+        <label>Background</label>
+        <input type="color" id="bg-color" value="#000000">
+      </div>
+    </section>
+  </div>
+
+  <div class="canvas-area" id="canvas-area">
+    <div class="empty-state" id="empty-state">
+      <div class="icon">+</div>
+      <p>Upload photos to get started</p>
+    </div>
+    <div class="canvas-wrapper" id="canvas-wrapper" style="display:none;">
+      <canvas id="preview-canvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+const state = {
+  photos: [],       // { id, img, file }
+  ratio: '9:16',
+  layout: 'v-stack',
+  gap: 8,
+  padding: 0,
+  radius: 0,
+  bgColor: '#000000',
+};
+
+let dragSrcIdx = null;
+const OUTPUT_SHORT = 1080; // short side resolution
+
+// DOM refs
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+const thumbsEl = document.getElementById('thumbs');
+const canvasEl = document.getElementById('preview-canvas');
+const canvasWrapper = document.getElementById('canvas-wrapper');
+const emptyState = document.getElementById('empty-state');
+const exportBtn = document.getElementById('export-btn');
+
+// --- Upload ---
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => { handleFiles(fileInput.files); fileInput.value = ''; });
+
+function handleFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      state.photos.push({ id: Date.now() + Math.random(), img, file });
+      renderThumbs();
+      renderCanvas();
+    };
+    img.src = url;
+  }
+}
+
+// --- Thumbnails ---
+function renderThumbs() {
+  thumbsEl.innerHTML = '';
+  state.photos.forEach((photo, idx) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.draggable = true;
+    div.dataset.idx = idx;
+
+    const im = document.createElement('img');
+    im.src = photo.img.src;
+    div.appendChild(im);
+
+    const rm = document.createElement('button');
+    rm.className = 'remove-btn';
+    rm.textContent = '\u00d7';
+    rm.addEventListener('click', e => { e.stopPropagation(); state.photos.splice(idx, 1); renderThumbs(); renderCanvas(); });
+    div.appendChild(rm);
+
+    // drag reorder
+    div.addEventListener('dragstart', e => {
+      dragSrcIdx = idx;
+      div.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    div.addEventListener('dragend', () => { div.classList.remove('dragging'); dragSrcIdx = null; });
+    div.addEventListener('dragover', e => { e.preventDefault(); div.classList.add('dragover-thumb'); });
+    div.addEventListener('dragleave', () => div.classList.remove('dragover-thumb'));
+    div.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation();
+      div.classList.remove('dragover-thumb');
+      if (dragSrcIdx !== null && dragSrcIdx !== idx) {
+        const item = state.photos.splice(dragSrcIdx, 1)[0];
+        state.photos.splice(idx, 0, item);
+        renderThumbs();
+        renderCanvas();
+      }
+    });
+
+    thumbsEl.appendChild(div);
+  });
+  exportBtn.disabled = state.photos.length === 0;
+}
+
+// --- Controls ---
+document.getElementById('ratio-options').addEventListener('click', e => {
+  const btn = e.target.closest('.ratio-btn');
+  if (!btn) return;
+  document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.ratio = btn.dataset.ratio;
+  renderCanvas();
+});
+
+document.getElementById('layout-options').addEventListener('click', e => {
+  const btn = e.target.closest('.layout-btn');
+  if (!btn) return;
+  document.querySelectorAll('.layout-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.layout = btn.dataset.layout;
+  renderCanvas();
+});
+
+document.getElementById('gap-slider').addEventListener('input', e => { state.gap = +e.target.value; renderCanvas(); });
+document.getElementById('padding-slider').addEventListener('input', e => { state.padding = +e.target.value; renderCanvas(); });
+document.getElementById('radius-slider').addEventListener('input', e => { state.radius = +e.target.value; renderCanvas(); });
+document.getElementById('bg-color').addEventListener('input', e => { state.bgColor = e.target.value; renderCanvas(); });
+
+// --- Canvas Rendering ---
+function parseRatio(r) {
+  const [w, h] = r.split(':').map(Number);
+  return w / h;
+}
+
+function getCanvasSize() {
+  const aspect = parseRatio(state.ratio);
+  if (aspect >= 1) {
+    return { w: OUTPUT_SHORT * aspect, h: OUTPUT_SHORT };
+  } else {
+    return { w: OUTPUT_SHORT, h: OUTPUT_SHORT / aspect };
+  }
+}
+
+function computeCells(count, canvasW, canvasH, pad, gap) {
+  const layout = state.layout;
+  const innerW = canvasW - pad * 2;
+  const innerH = canvasH - pad * 2;
+
+  if (count === 0) return [];
+  if (count === 1) return [{ x: pad, y: pad, w: innerW, h: innerH }];
+
+  const cells = [];
+
+  if (layout === 'v-stack') {
+    const cellH = (innerH - gap * (count - 1)) / count;
+    for (let i = 0; i < count; i++) {
+      cells.push({ x: pad, y: pad + i * (cellH + gap), w: innerW, h: cellH });
+    }
+  } else if (layout === 'h-stack') {
+    const cellW = (innerW - gap * (count - 1)) / count;
+    for (let i = 0; i < count; i++) {
+      cells.push({ x: pad + i * (cellW + gap), y: pad, w: cellW, h: innerH });
+    }
+  } else if (layout === 'grid') {
+    const cols = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+    const cellW = (innerW - gap * (cols - 1)) / cols;
+    const cellH = (innerH - gap * (rows - 1)) / rows;
+    for (let i = 0; i < count; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      // last row: center remaining items
+      const rowCount = row === rows - 1 ? count - row * cols : cols;
+      const rowOffset = (innerW - (rowCount * cellW + (rowCount - 1) * gap)) / 2;
+      const colInRow = row === rows - 1 ? i - row * cols : col;
+      cells.push({
+        x: pad + rowOffset + colInRow * (cellW + gap),
+        y: pad + row * (cellH + gap),
+        w: cellW,
+        h: cellH,
+      });
+    }
+  } else if (layout === 'feature') {
+    if (count === 1) return [{ x: pad, y: pad, w: innerW, h: innerH }];
+    const mainW = innerW * 0.6;
+    const sideW = innerW - mainW - gap;
+    cells.push({ x: pad, y: pad, w: mainW, h: innerH });
+    const sideCount = count - 1;
+    const cellH = (innerH - gap * (sideCount - 1)) / sideCount;
+    for (let i = 0; i < sideCount; i++) {
+      cells.push({ x: pad + mainW + gap, y: pad + i * (cellH + gap), w: sideW, h: cellH });
+    }
+  } else if (layout === 'top-heavy') {
+    if (count === 1) return [{ x: pad, y: pad, w: innerW, h: innerH }];
+    const topH = innerH * 0.6;
+    const botH = innerH - topH - gap;
+    cells.push({ x: pad, y: pad, w: innerW, h: topH });
+    const botCount = count - 1;
+    const cellW = (innerW - gap * (botCount - 1)) / botCount;
+    for (let i = 0; i < botCount; i++) {
+      cells.push({ x: pad + i * (cellW + gap), y: pad + topH + gap, w: cellW, h: botH });
+    }
+  } else if (layout === 'mosaic') {
+    if (count === 1) return [{ x: pad, y: pad, w: innerW, h: innerH }];
+    if (count === 2) {
+      const cellW = (innerW - gap) / 2;
+      cells.push({ x: pad, y: pad, w: cellW, h: innerH });
+      cells.push({ x: pad + cellW + gap, y: pad, w: cellW, h: innerH });
+    } else if (count === 3) {
+      const leftW = innerW * 0.55;
+      const rightW = innerW - leftW - gap;
+      cells.push({ x: pad, y: pad, w: leftW, h: innerH });
+      const rh = (innerH - gap) / 2;
+      cells.push({ x: pad + leftW + gap, y: pad, w: rightW, h: rh });
+      cells.push({ x: pad + leftW + gap, y: pad + rh + gap, w: rightW, h: rh });
+    } else {
+      // alternating tall/short pattern
+      const colW = (innerW - gap) / 2;
+      const tallH = innerH * 0.6;
+      const shortH = innerH - tallH - gap;
+      // fill left column then right
+      const leftCount = Math.ceil(count / 2);
+      const rightCount = count - leftCount;
+      // left: first is tall
+      for (let i = 0; i < leftCount; i++) {
+        const h = i === 0 ? tallH : (innerH - tallH - gap * leftCount + gap) / (leftCount - 1);
+        const prevH = i === 0 ? 0 : tallH + gap;
+        if (leftCount === 1) {
+          cells.push({ x: pad, y: pad, w: colW, h: innerH });
+        } else if (i === 0) {
+          const lTallH = (innerH - gap * (leftCount - 1)) * 0.6;
+          cells.push({ x: pad, y: pad, w: colW, h: lTallH });
+        } else {
+          const lTallH = (innerH - gap * (leftCount - 1)) * 0.6;
+          const lShortH = (innerH - gap * (leftCount - 1) - lTallH) / (leftCount - 1);
+          cells.push({ x: pad, y: pad + lTallH + gap * i + lShortH * (i - 1), w: colW, h: lShortH });
+        }
+      }
+      for (let i = 0; i < rightCount; i++) {
+        if (rightCount === 1) {
+          cells.push({ x: pad + colW + gap, y: pad, w: colW, h: innerH });
+        } else if (i === 0) {
+          const rShortH = (innerH - gap * (rightCount - 1)) * 0.4;
+          cells.push({ x: pad + colW + gap, y: pad, w: colW, h: rShortH });
+        } else {
+          const rShortH = (innerH - gap * (rightCount - 1)) * 0.4;
+          const rTallH = (innerH - gap * (rightCount - 1) - rShortH) / (rightCount - 1);
+          cells.push({ x: pad + colW + gap, y: pad + rShortH + gap * i + rTallH * (i - 1), w: colW, h: rTallH });
+        }
+      }
+    }
+  }
+
+  return cells;
+}
+
+function drawImageCover(ctx, img, x, y, w, h, radius) {
+  const imgAspect = img.naturalWidth / img.naturalHeight;
+  const cellAspect = w / h;
+  let sx, sy, sw, sh;
+  if (imgAspect > cellAspect) {
+    sh = img.naturalHeight;
+    sw = sh * cellAspect;
+    sx = (img.naturalWidth - sw) / 2;
+    sy = 0;
+  } else {
+    sw = img.naturalWidth;
+    sh = sw / cellAspect;
+    sx = 0;
+    sy = (img.naturalHeight - sh) / 2;
+  }
+
+  ctx.save();
+  if (radius > 0) {
+    roundRect(ctx, x, y, w, h, radius);
+    ctx.clip();
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function renderCanvas() {
+  const count = state.photos.length;
+
+  if (count === 0) {
+    emptyState.style.display = '';
+    canvasWrapper.style.display = 'none';
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  canvasWrapper.style.display = '';
+
+  const { w, h } = getCanvasSize();
+  canvasEl.width = w;
+  canvasEl.height = h;
+
+  const ctx = canvasEl.getContext('2d');
+  ctx.fillStyle = state.bgColor;
+  ctx.fillRect(0, 0, w, h);
+
+  const cells = computeCells(count, w, h, state.padding, state.gap);
+  for (let i = 0; i < count; i++) {
+    const cell = cells[i];
+    if (!cell) break;
+    drawImageCover(ctx, state.photos[i].img, cell.x, cell.y, cell.w, cell.h, state.radius);
+  }
+}
+
+// --- Export ---
+exportBtn.addEventListener('click', () => {
+  if (state.photos.length === 0) return;
+  // Render at full resolution
+  renderCanvas();
+  canvasEl.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `photo-layout-${state.ratio.replace(':', 'x')}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+});
+
+// Prevent default drop on page
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => e.preventDefault());
+</script>
+</body>
+</html>
