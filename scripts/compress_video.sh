@@ -137,6 +137,7 @@ for file in "${files[@]}"; do
   else
     echo "Compressing: $basename -> compressed/${stem}.mp4"
     "${cmd[@]}"
+    touch -r "$file" "$out"
     orig_size=$(stat -f%z "$file")
     new_size=$(stat -f%z "$out")
     pct=$((100 - (new_size * 100 / orig_size)))
