@@ -84,6 +84,46 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   exit 1
 fi
 
+# Extract a YYYY-MM-DD HH:MM:SS date from a filename like
+# "Screen Recording 2026-04-27 at 10.49.40 meeting.mov" or
+# "Screenshot 2026-04-27 at 10.49.40 AM.png". Echoes nothing if not found.
+parse_filename_date() {
+  local name="$1"
+  local re='([0-9]{4})-([0-9]{2})-([0-9]{2})[ _]+(at[ _]+)?([0-9]{2})[.:]([0-9]{2})[.:]([0-9]{2})'
+  if [[ "$name" =~ $re ]]; then
+    printf '%s-%s-%s %s:%s:%s' \
+      "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" \
+      "${BASH_REMATCH[5]}" "${BASH_REMATCH[6]}" "${BASH_REMATCH[7]}"
+  fi
+}
+
+# Copy timestamps from source to output. If the filename encodes a date
+# that doesn't match the source's birth time (e.g. AirDrop reset it),
+# use the filename date instead.
+apply_timestamps() {
+  local src="$1" dst="$2"
+  local fname_date src_birth
+  fname_date=$(parse_filename_date "$(basename -- "$src")")
+  src_birth=$(stat -f "%SB" -t "%Y-%m-%d %H:%M:%S" "$src")
+
+  if [[ -n "$fname_date" && "$fname_date" != "$src_birth" ]]; then
+    echo "  Source creation time ($src_birth) differs from filename ($fname_date); using filename date"
+    local yyyy=${fname_date:0:4} mm=${fname_date:5:2} dd=${fname_date:8:2}
+    local HH=${fname_date:11:2} MM=${fname_date:14:2} SS=${fname_date:17:2}
+    touch -t "${yyyy}${mm}${dd}${HH}${MM}.${SS}" "$dst"
+    if command -v SetFile >/dev/null 2>&1; then
+      SetFile -d "${mm}/${dd}/${yyyy} ${HH}:${MM}:${SS}" "$dst"
+    fi
+  else
+    touch -r "$src" "$dst"
+    if command -v SetFile >/dev/null 2>&1; then
+      local btime
+      btime=$(stat -f "%SB" -t "%m/%d/%Y %H:%M:%S" "$src")
+      SetFile -d "$btime" "$dst"
+    fi
+  fi
+}
+
 # Collect input files
 if [[ -d "$target" ]]; then
   shopt -s nocaseglob nullglob
@@ -137,11 +177,7 @@ for file in "${files[@]}"; do
   else
     echo "Compressing: $basename -> compressed/${stem}.mp4"
     "${cmd[@]}"
-    touch -r "$file" "$out"
-    if command -v SetFile >/dev/null 2>&1; then
-      btime=$(stat -f "%SB" -t "%m/%d/%Y %H:%M:%S" "$file")
-      SetFile -d "$btime" "$out"
-    fi
+    apply_timestamps "$file" "$out"
     orig_size=$(stat -f%z "$file")
     new_size=$(stat -f%z "$out")
     pct=$((100 - (new_size * 100 / orig_size)))
