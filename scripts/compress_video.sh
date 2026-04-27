@@ -138,6 +138,10 @@ for file in "${files[@]}"; do
     echo "Compressing: $basename -> compressed/${stem}.mp4"
     "${cmd[@]}"
     touch -r "$file" "$out"
+    if command -v SetFile >/dev/null 2>&1; then
+      btime=$(stat -f "%SB" -t "%m/%d/%Y %H:%M:%S" "$file")
+      SetFile -d "$btime" "$out"
+    fi
     orig_size=$(stat -f%z "$file")
     new_size=$(stat -f%z "$out")
     pct=$((100 - (new_size * 100 / orig_size)))
