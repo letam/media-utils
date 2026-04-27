@@ -5,8 +5,8 @@ usage() {
   cat <<EOF
 Usage: $0 [-n] <file-or-folder> [<file-or-folder>...]
 
-Updates each file's modification time and (on macOS) creation time to
-match a date encoded in its filename, e.g.
+Updates each file's creation time (macOS only, via SetFile) to match
+a date encoded in its filename, e.g.
   "Screen Recording 2026-04-27 at 10.49.40 standup.mov"
   "Screenshot 2026-04-27 at 10.49.40 AM.png"
 
@@ -32,7 +32,7 @@ parse_filename_date() {
   fi
 }
 
-# Set $file's mtime and birth time to the date encoded in its filename.
+# Set $file's birth time to the date encoded in its filename.
 # No-op when the filename has no date or the birth time already matches.
 # Honors $dryrun ("true"/"false") from the caller.
 update_file_date_from_name() {
@@ -53,9 +53,10 @@ update_file_date_from_name() {
 
   local yyyy=${fname_date:0:4} mm=${fname_date:5:2} dd=${fname_date:8:2}
   local HH=${fname_date:11:2} MM=${fname_date:14:2} SS=${fname_date:17:2}
-  touch -t "${yyyy}${mm}${dd}${HH}${MM}.${SS}" "$file"
   if command -v SetFile >/dev/null 2>&1; then
     SetFile -d "${mm}/${dd}/${yyyy} ${HH}:${MM}:${SS}" "$file"
+  else
+    echo "  Warning: SetFile not found; cannot set creation time on $file" >&2
   fi
 }
 
