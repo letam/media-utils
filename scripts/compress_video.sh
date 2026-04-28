@@ -11,12 +11,21 @@ meetings: H.265, CRF 28, 30 fps, max 1920px wide, 96k mono audio.
 Creates compressed copies in a "compressed" subfolder (originals untouched).
 
 Options:
-  -c CRF     Constant Rate Factor, lower = better quality/larger file
-             (h265: 18-32 reasonable, default 28; h264: add ~6)
+  -c CRF     Constant Rate Factor for software codecs, lower = better
+             quality/larger file (h265: 18-32 reasonable, default 28;
+             h264: add ~6). Ignored for hardware codecs.
+  -q QUAL    VideoToolbox quality 0-100, higher = better (default: 50).
+             Only applies to hevc_vt / h264_vt.
   -r FPS     Output frame rate (default: 30)
   -w WIDTH   Max width in pixels, keeps aspect ratio (default: 1920)
-  -x CODEC   Video codec: h265 or h264 (default: h265)
-  -p PRESET  ffmpeg preset: ultrafast..veryslow (default: medium)
+  -x CODEC   Video codec (default: h265):
+               h265, h264         - software (libx265/libx264), best
+                                    quality-per-byte, pegs the CPU
+               hevc_vt, h264_vt   - hardware (VideoToolbox on macOS),
+                                    much faster and quieter, slightly
+                                    larger files at same quality
+  -p PRESET  ffmpeg preset: ultrafast..veryslow (default: medium).
+             Ignored for hardware codecs.
   -a RATE    Audio bitrate, e.g. 64k, 96k, 128k (default: 96k)
   -m         Mono audio (default: keep source channels)
   -n         Dry-run (show the ffmpeg command, don't run it)
@@ -33,6 +42,9 @@ Options:
 * Compress every video in a folder:
 ./compress_video.sh ~/Recordings
 
+* Quiet, fast encode using the Apple Silicon media engine:
+./compress_video.sh -x hevc_vt meeting.mov
+
 * Preview the ffmpeg command without running it:
 ./compress_video.sh -n meeting.mov
 
@@ -40,6 +52,7 @@ EOF
 }
 
 crf=28
+vt_quality=50
 fps=30
 width=1920
 codec="h265"
@@ -48,9 +61,10 @@ audio_rate="96k"
 mono="false"
 dryrun="false"
 
-while getopts ":c:r:w:x:p:a:mnh" opt; do
+while getopts ":c:q:r:w:x:p:a:mnh" opt; do
   case "$opt" in
     c) crf="$OPTARG" ;;
+    q) vt_quality="$OPTARG" ;;
     r) fps="$OPTARG" ;;
     w) width="$OPTARG" ;;
     x) codec="$OPTARG" ;;
@@ -74,9 +88,11 @@ fi
 target="$1"
 
 case "$codec" in
-  h265|hevc) vcodec="libx265"; vtag=(-tag:v hvc1) ;;
-  h264|avc)  vcodec="libx264"; vtag=() ;;
-  *) echo "Error: unknown codec '$codec' (use h265 or h264)." >&2; exit 2 ;;
+  h265|hevc)        vcodec="libx265";            vtag=(-tag:v hvc1); hwaccel="false" ;;
+  h264|avc)         vcodec="libx264";            vtag=();             hwaccel="false" ;;
+  hevc_vt|h265_vt)  vcodec="hevc_videotoolbox";  vtag=(-tag:v hvc1); hwaccel="true"  ;;
+  h264_vt)          vcodec="h264_videotoolbox";  vtag=();             hwaccel="true"  ;;
+  *) echo "Error: unknown codec '$codec' (use h265, h264, hevc_vt, or h264_vt)." >&2; exit 2 ;;
 esac
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
@@ -107,7 +123,11 @@ if [[ ${#files[@]} -eq 0 ]]; then
 fi
 
 echo "Found ${#files[@]} video(s)"
-echo "Settings: codec=$codec crf=$crf fps=$fps width<=${width}px preset=$preset audio=$audio_rate mono=$mono"
+if [[ "$hwaccel" == "true" ]]; then
+  echo "Settings: codec=$codec (VideoToolbox) q=$vt_quality fps=$fps width<=${width}px audio=$audio_rate mono=$mono"
+else
+  echo "Settings: codec=$codec crf=$crf fps=$fps width<=${width}px preset=$preset audio=$audio_rate mono=$mono"
+fi
 
 outdir="$parent/compressed"
 [[ "$dryrun" == "false" ]] && mkdir -p "$outdir"
@@ -118,6 +138,12 @@ vf="scale='min($width,iw)':-2,fps=$fps"
 ac_args=()
 [[ "$mono" == "true" ]] && ac_args=(-ac 1)
 
+if [[ "$hwaccel" == "true" ]]; then
+  venc_args=(-c:v "$vcodec" -q:v "$vt_quality")
+else
+  venc_args=(-c:v "$vcodec" -preset "$preset" -crf "$crf")
+fi
+
 count=0
 for file in "${files[@]}"; do
   basename="$(basename -- "$file")"
@@ -127,7 +153,7 @@ for file in "${files[@]}"; do
   cmd=(
     ffmpeg -hide_banner -y -i "$file"
     -vf "$vf"
-    -c:v "$vcodec" -preset "$preset" -crf "$crf"
+    "${venc_args[@]}"
     -pix_fmt yuv420p
     ${vtag[@]+"${vtag[@]}"}
     -c:a aac -b:a "$audio_rate" ${ac_args[@]+"${ac_args[@]}"}
