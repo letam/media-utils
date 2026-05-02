@@ -150,11 +150,8 @@ for file in "${files[@]}"; do
   stem="${basename%.*}"
   out="$outdir/${stem}.mp4"
 
-  hwdec_args=()
-  [[ "$(uname)" == "Darwin" ]] && hwdec_args=(-hwaccel videotoolbox)
-
   cmd=(
-    ffmpeg -hide_banner -y "${hwdec_args[@]}" -i "$file"
+    ffmpeg -hide_banner -y -i "$file"
     -vf "$vf"
     "${venc_args[@]}"
     -pix_fmt yuv420p
