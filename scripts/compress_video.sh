@@ -105,6 +105,7 @@ fi
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 date_from_name="$script_dir/set_file_date_from_filename.sh"
+copy_metadata="$script_dir/copy_metadata.sh"
 
 # Collect input files
 if [[ -d "$target" ]]; then
@@ -174,10 +175,7 @@ for file in "${files[@]}"; do
     # is available. The ffmpeg -map_metadata/use_metadata_tags flags above
     # already carry most of this; this pass recovers anything ffmpeg dropped.
     if command -v exiftool >/dev/null 2>&1; then
-      exiftool -q -overwrite_original -tagsFromFile "$file" \
-        -gps:all -location:all -keys:all \
-        -CreateDate -ModifyDate -Make -Model \
-        "$out" || echo "Warning: exiftool metadata copy failed for $basename" >&2
+      "$copy_metadata" "$file" "$out" || true
     fi
     touch -r "$file" "$out"
     if command -v SetFile >/dev/null 2>&1; then
