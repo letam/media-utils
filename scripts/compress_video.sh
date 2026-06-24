@@ -9,6 +9,9 @@ Usage:
 Compresses video(s) using ffmpeg. Tuned defaults for screen recordings of
 meetings: H.265, CRF 28, 30 fps, max 1920px wide, 96k mono audio.
 Creates compressed copies in a "compressed" subfolder (originals untouched).
+Preserves source metadata (geolocation, creation date, camera) via ffmpeg's
+metadata mapping; if exiftool is installed it also runs a copy pass to recover
+any GPS/date tags ffmpeg drops during the re-encode.
 
 Options:
   -c CRF     Constant Rate Factor for software codecs, lower = better
@@ -157,7 +160,8 @@ for file in "${files[@]}"; do
     -pix_fmt yuv420p
     ${vtag[@]+"${vtag[@]}"}
     -c:a aac -b:a "$audio_rate" ${ac_args[@]+"${ac_args[@]}"}
-    -movflags +faststart
+    -map_metadata 0
+    -movflags +faststart+use_metadata_tags
     "$out"
   )
 
@@ -166,6 +170,15 @@ for file in "${files[@]}"; do
   else
     echo "Compressing: $basename -> compressed/${stem}.mp4"
     "${cmd[@]}"
+    # Bulletproof metadata copy (GPS/geolocation, dates, camera) if exiftool
+    # is available. The ffmpeg -map_metadata/use_metadata_tags flags above
+    # already carry most of this; this pass recovers anything ffmpeg dropped.
+    if command -v exiftool >/dev/null 2>&1; then
+      exiftool -q -overwrite_original -tagsFromFile "$file" \
+        -gps:all -location:all -keys:all \
+        -CreateDate -ModifyDate -Make -Model \
+        "$out" || echo "Warning: exiftool metadata copy failed for $basename" >&2
+    fi
     touch -r "$file" "$out"
     if command -v SetFile >/dev/null 2>&1; then
       btime=$(stat -f "%SB" -t "%m/%d/%Y %H:%M:%S" "$file")
