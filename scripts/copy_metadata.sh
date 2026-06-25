@@ -13,10 +13,15 @@ from a source media file onto another file using exiftool. Useful for
 restoring tags onto an already-compressed copy, e.g. files compressed before
 compress_video.sh learned to preserve them.
 
+By default it also syncs the destination's filesystem timestamps (modification
+time, and on macOS the Finder creation time) to match the source. Pass -T to
+copy only the embedded metadata and leave filesystem times untouched.
+
 The single-file and folder forms assume the compress_video.sh output layout:
 a "compressed/<stem>.mp4" sibling of each source.
 
 Options:
+  -T   Don't sync filesystem timestamps (embedded metadata only)
   -n   Dry-run (show what would be copied, don't modify any files)
   -h   Show help
 
@@ -40,7 +45,20 @@ dest_for() {
   printf '%s/compressed/%s.mp4' "$dir" "$stem"
 }
 
-# copy_metadata <src> <dst>. Honors $dryrun ("true"/"false").
+# Copy filesystem mtime and (macOS) birth/creation time from src to dst.
+sync_filesystem_times() {
+  local src="$1" dst="$2"
+  touch -r "$src" "$dst"
+  if command -v SetFile >/dev/null 2>&1; then
+    local btime
+    btime=$(stat -f "%SB" -t "%m/%d/%Y %H:%M:%S" "$src")
+    SetFile -d "$btime" "$dst"
+  else
+    echo "  Warning: SetFile not found; cannot set creation time on $dst" >&2
+  fi
+}
+
+# copy_metadata <src> <dst>. Honors $dryrun and $sync_times ("true"/"false").
 copy_metadata() {
   local src="$1" dst="$2"
   [[ -f "$src" ]] || { echo "Error: source not found: $src" >&2; return 1; }
@@ -53,12 +71,15 @@ copy_metadata() {
 
   exiftool -q -overwrite_original -tagsFromFile "$src" "${TAGS[@]}" "$dst" \
     || { echo "Warning: exiftool metadata copy failed for $dst" >&2; return 1; }
+  [[ "${sync_times:-true}" == "true" ]] && sync_filesystem_times "$src" "$dst"
 }
 
 dryrun="false"
-while getopts ":nh" opt; do
+sync_times="true"
+while getopts ":nTh" opt; do
   case "$opt" in
     n) dryrun="true" ;;
+    T) sync_times="false" ;;
     h) usage; exit 0 ;;
     \?) echo "Unknown option -$OPTARG" >&2; usage; exit 2 ;;
   esac
