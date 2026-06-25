@@ -14,13 +14,17 @@ restoring tags onto an already-compressed copy, e.g. files compressed before
 compress_video.sh learned to preserve them.
 
 By default it also syncs the destination's filesystem timestamps (modification
-time, and on macOS the Finder creation time) to match the source. Pass -T to
-copy only the embedded metadata and leave filesystem times untouched.
+time, and on macOS the Finder creation time) to match the source file's
+on-disk times. Pass -T to copy only the embedded metadata and leave filesystem
+times untouched, or -c to set them from the embedded capture date instead.
 
 The single-file and folder forms assume the compress_video.sh output layout:
 a "compressed/<stem>.mp4" sibling of each source.
 
 Options:
+  -c   Set filesystem timestamps from the embedded capture date
+       (CreationDate/CreateDate) rather than the source file's on-disk times.
+       Timezone-aware: uses the local wall-clock time of capture.
   -T   Don't sync filesystem timestamps (embedded metadata only)
   -n   Dry-run (show what would be copied, don't modify any files)
   -h   Show help
@@ -45,9 +49,38 @@ dest_for() {
   printf '%s/compressed/%s.mp4' "$dir" "$stem"
 }
 
-# Copy filesystem mtime and (macOS) birth/creation time from src to dst.
+# Set dst's birth (macOS) and modification times to a "YYYY-MM-DD HH:MM:SS"
+# wall-clock string.
+set_times_to() {
+  local dst="$1" ts="$2"
+  local y=${ts:0:4} mo=${ts:5:2} d=${ts:8:2} H=${ts:11:2} M=${ts:14:2} S=${ts:17:2}
+  touch -t "${y}${mo}${d}${H}${M}.${S}" "$dst"
+  if command -v SetFile >/dev/null 2>&1; then
+    SetFile -d "${mo}/${d}/${y} ${H}:${M}:${S}" "$dst"
+  else
+    echo "  Warning: SetFile not found; cannot set creation time on $dst" >&2
+  fi
+}
+
+# Sync dst's filesystem mtime and (macOS) birth time. With $time_source=capture,
+# derive them from the embedded capture date (timezone-resolved local time),
+# preferring Keys:CreationDate (carries the true capture offset) and falling
+# back to QuickTime:CreateDate (UTC, converted to local). Otherwise copy the
+# source file's on-disk times.
 sync_filesystem_times() {
   local src="$1" dst="$2"
+
+  if [[ "${time_source:-file}" == "capture" ]]; then
+    local cap
+    cap=$(exiftool -s3 -api QuickTimeUTC=1 -d '%Y-%m-%d %H:%M:%S' \
+            -CreationDate -CreateDate "$src" 2>/dev/null | head -n1)
+    if [[ -n "$cap" ]]; then
+      set_times_to "$dst" "$cap"
+      return 0
+    fi
+    echo "  Warning: no embedded capture date in $(basename -- "$src"); using file times" >&2
+  fi
+
   touch -r "$src" "$dst"
   if command -v SetFile >/dev/null 2>&1; then
     local btime
@@ -76,9 +109,11 @@ copy_metadata() {
 
 dryrun="false"
 sync_times="true"
-while getopts ":nTh" opt; do
+time_source="file"
+while getopts ":ncTh" opt; do
   case "$opt" in
     n) dryrun="true" ;;
+    c) time_source="capture" ;;
     T) sync_times="false" ;;
     h) usage; exit 0 ;;
     \?) echo "Unknown option -$OPTARG" >&2; usage; exit 2 ;;
